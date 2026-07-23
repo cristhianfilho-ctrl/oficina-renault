@@ -140,8 +140,7 @@ const SHEET_ID="1-lk4MMYRoh0v9OCDge_3FKdHxvco93YG_B1f5QHvuHw";
 const LOJAS=["Afogados","Imbiribeira","Olinda","Piedade","Epitacio","Cabedelo","Iguatemi","Lauro"];
 const PRACA_MAP={Imbiribeira:'Pernambuco',Afogados:'Pernambuco',Olinda:'Pernambuco',Piedade:'Pernambuco',Epitacio:'Paraíba',Cabedelo:'Paraíba',Iguatemi:'Bahia',Lauro:'Bahia'};
 const PRACAS=['Pernambuco','Paraíba','Bahia'];
-const csvUrlGviz=aba=>`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(aba)}`;
-const csvUrlExport=aba=>`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(aba)}`;
+const SHEET_URL_BASE=`https://docs.google.com/spreadsheets/d/${SHEET_ID}`;
 
 /* ====== PARSER CSV ====== */
 function parseCSV(text){
@@ -180,16 +179,28 @@ let selLojas=new Set();
 let sortKey='conv',sortDir='desc';
 
 /* ====== LEITURA DA PLANILHA ====== */
-async function lerAba(loja){
-  // tenta buscar o CSV; detecta se veio HTML (planilha não pública) ou erro
-  const resp=await fetch(csvUrlGviz(loja),{cache:'no-store'});
+async function lerAbaExport(gid){
+  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
+  const resp=await fetch(url,{cache:'no-store'});
   if(!resp.ok) throw new Error('HTTP '+resp.status);
   const txt=await resp.text();
-  const amostra=txt.slice(0,300).toLowerCase();
-  if(amostra.includes('<!doctype html')||amostra.includes('<html')||amostra.includes('google-site-verification')){
-    throw new Error('NAO_PUBLICA');
-  }
+  const a=txt.slice(0,300).toLowerCase();
+  if(a.includes('<!doctype html')||a.includes('<html')) throw new Error('NAO_PUBLICA');
   return txt;
+}
+
+async function lerAbaGviz(loja){
+  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(loja)}`;
+  const resp=await fetch(url,{cache:'no-store'});
+  if(!resp.ok) throw new Error('HTTP '+resp.status);
+  const txt=await resp.text();
+  const a=txt.slice(0,300).toLowerCase();
+  if(a.includes('<!doctype html')||a.includes('<html')||a.includes('google-site-verification')) throw new Error('NAO_PUBLICA');
+  return txt;
+}
+
+async function lerAba(loja){
+  return await lerAbaGviz(loja);
 }
 
 async function carregar(){
@@ -202,17 +213,28 @@ async function carregar(){
       const txt=await lerAba(loja);
       const rows=parseCSV(txt);
       if(rows.length<2) continue;
-      const head=rows[0].map(h=>h.trim().toLowerCase());
-      const idx=n=>head.indexOf(n);
-      const iData=idx('data'),iHora=idx('horário'),iCli=idx('cliente'),iPlaca=idx('placa'),
-            iVeic=idx('veículo atual'),iRev=idx('revisão'),iTel=idx('contato'),
-            iAval=idx('avaliação web feita?'),iValor=idx('valor da avaliação web (r$)'),
-            iModelo=idx('modelo de interesse'),iVend=idx('vendeu?');
-      if(iData<0||iPlaca<0){ falhas.push(loja+' (cabeçalho não reconhecido)'); continue; }
-      for(let r=1;r<rows.length;r++){
+      const norm=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      const head=rows[0].map(norm);
+      const findCol=(...keys)=>{
+        for(let i=0;i<head.length;i++){ if(keys.every(k=>head[i].includes(k))) return i; }
+        return -1;
+      };
+      let iData=findCol('data'),iHora=findCol('hor'),iCli=findCol('cliente'),iPlaca=findCol('placa'),
+          iVeic=findCol('veiculo'),iRev=findCol('revis'),iTel=findCol('contato'),
+          iAval=findCol('avaliacao','feita'),iValor=findCol('valor'),
+          iModelo=findCol('modelo'),iVend=findCol('vendeu');
+      // fallback: se não reconheceu pelos nomes, usa posição fixa (estrutura conhecida A..M)
+      // A=0 Chave, B=1 Data, C=2 Horário, D=3 Cliente, E=4 Placa, F=5 Veículo, G=6 Revisão,
+      // H=7 Contato, I=8 Aval?, J=9 Valor, K=10 Modelo, L=11 Vendeu?, M=12 Obs
+      let usouFallback=false;
+      if(iData<0||iPlaca<0){
+        iData=1;iHora=2;iCli=3;iPlaca=4;iVeic=5;iRev=6;iTel=7;iAval=8;iValor=9;iModelo=10;iVend=11;
+        usouFallback=true;
+      }
+      for(let r=0;r<rows.length;r++){
         const row=rows[r];
         const dataBr=row[iData]; if(!dataBr)continue;
-        const iso=brToISO(dataBr); if(!iso)continue;
+        const iso=brToISO(dataBr); if(!iso)continue;  // pula cabeçalho e linhas sem data válida
         clientes.push({
           loja,praca:PRACA_MAP[loja],dia:iso,
           hora:(row[iHora]||'').trim(),
