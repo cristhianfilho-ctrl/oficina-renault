@@ -137,7 +137,13 @@ tr:hover td{background:var(--panel);}
 <script>
 /* ====== CONFIG ====== */
 const SHEET_ID="1-lk4MMYRoh0v9OCDge_3FKdHxvco93YG_B1f5QHvuHw";
+// ID de publicação (Arquivo > Publicar na web). Usado para leitura estável via /pub.
+const PUB_ID="2PACX-1vQWcKqY20ynXrv_STHhRS2JCRPm7jaYSEE2wslQabSk8IJoxAYVhM0Eoifb1-TNaXsMkOj9KionjjeR";
 const LOJAS=["Afogados","Imbiribeira","Olinda","Piedade","Epitacio","Cabedelo","Iguatemi","Lauro"];
+const GID={
+  Afogados:"753342613", Imbiribeira:"101458476", Olinda:"569013249", Piedade:"1123546805",
+  Epitacio:"1335904896", Cabedelo:"1865932396", Iguatemi:"2138172232", Lauro:"1039487285"
+};
 const PRACA_MAP={Imbiribeira:'Pernambuco',Afogados:'Pernambuco',Olinda:'Pernambuco',Piedade:'Pernambuco',Epitacio:'Paraíba',Cabedelo:'Paraíba',Iguatemi:'Bahia',Lauro:'Bahia'};
 const PRACAS=['Pernambuco','Paraíba','Bahia'];
 const SHEET_URL_BASE=`https://docs.google.com/spreadsheets/d/${SHEET_ID}`;
@@ -179,18 +185,7 @@ let selLojas=new Set();
 let sortKey='conv',sortDir='desc';
 
 /* ====== LEITURA DA PLANILHA ====== */
-async function lerAbaExport(gid){
-  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
-  const resp=await fetch(url,{cache:'no-store'});
-  if(!resp.ok) throw new Error('HTTP '+resp.status);
-  const txt=await resp.text();
-  const a=txt.slice(0,300).toLowerCase();
-  if(a.includes('<!doctype html')||a.includes('<html')) throw new Error('NAO_PUBLICA');
-  return txt;
-}
-
-async function lerAbaGviz(loja){
-  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(loja)}`;
+async function fetchCSV(url){
   const resp=await fetch(url,{cache:'no-store'});
   if(!resp.ok) throw new Error('HTTP '+resp.status);
   const txt=await resp.text();
@@ -200,7 +195,20 @@ async function lerAbaGviz(loja){
 }
 
 async function lerAba(loja){
-  return await lerAbaGviz(loja);
+  const gid=GID[loja];
+  // 1º: endpoint publicado /pub (estável no navegador, sem problema de CORS)
+  const urlPub=`https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?output=csv&gid=${gid}`;
+  try{
+    return await fetchCSV(urlPub);
+  }catch(e1){
+    // 2º fallback: gviz por nome de aba
+    try{
+      return await fetchCSV(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(loja)}`);
+    }catch(e2){
+      // 3º fallback: export por gid
+      return await fetchCSV(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`);
+    }
+  }
 }
 
 async function carregar(){
