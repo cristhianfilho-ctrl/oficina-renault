@@ -74,6 +74,7 @@ tr:hover td{background:var(--panel);}
 .dim{color:var(--text3);}
 .foot-row td{background:var(--panel);border-top:1px solid var(--line-strong);font-weight:600;}
 .total-row td{background:var(--panel2);border-top:2px solid var(--line-strong);font-weight:700;color:var(--text);}
+.meta-row td{background:rgba(255,204,51,0.06);font-size:11px;color:var(--text3);font-style:italic;border-top:none;padding:5px 10px;}
 .muted-note{font-size:11px;color:var(--text3);line-height:1.6;margin-top:8px;}
 @media(max-width:600px){h1{font-size:19px;}.card .val{font-size:22px;}}
 </style>
@@ -117,6 +118,10 @@ tr:hover td{background:var(--panel);}
 </div>
 <div class="sec-note">Verde = acima do total · amarelo = igual · vermelho = abaixo.</div>
 <div class="tablewrap"><div class="tablescroll"><table id="compTable"></table></div></div>
+
+<div class="sec-title">Agendados por semana — Agosto <span class="dim" style="font-weight:400;font-size:12px;">· por loja</span></div>
+<div class="sec-note">Total de agendamentos de cada loja distribuído nas semanas de agosto (segunda a sábado; domingos excluídos).</div>
+<div class="tablewrap"><div class="tablescroll"><table id="semanaTable"></table></div></div>
 
 <div class="sec-title">Possibilidades dos próximos 6 dias por loja</div>
 <div class="sec-note">Clientes confirmados a revisar de hoje em diante — a agenda de prospecção.</div>
@@ -286,6 +291,8 @@ async function carregar(){
 function consolidar(clientes){
   const hoje=new Date();hoje.setHours(0,0,0,0);
   const byLoja={};
+  // garante que TODAS as 8 lojas existem, mesmo sem agendamentos
+  LOJAS.forEach(l=>{byLoja[l]={loja:l,praca:PRACA_MAP[l],poss_pass:0,poss_fut:0,aval:0,vend:0,valor:0};});
   clientes.forEach(c=>{
     const b=byLoja[c.loja]||(byLoja[c.loja]={loja:c.loja,praca:c.praca,poss_pass:0,poss_fut:0,aval:0,vend:0,valor:0});
     const passado=parseDia(c.dia)<hoje;
@@ -297,7 +304,7 @@ function consolidar(clientes){
       b.poss_fut++;
     }
   });
-  const por_loja=LOJAS.filter(l=>byLoja[l]).map(l=>byLoja[l]);
+  const por_loja=LOJAS.map(l=>byLoja[l]);
   clientes.sort((a,b)=>a.dia.localeCompare(b.dia)||(a.hora||'').localeCompare(b.hora||'')||a.loja.localeCompare(b.loja));
   return {por_loja,clientes};
 }
@@ -365,7 +372,40 @@ function taxas(){
   ];
   document.getElementById('taxas').innerHTML=items.map(s=>`<div class="card taxa"><div class="head">${s.lbl}</div><div class="pct">${s.v}%</div><div class="den">${s.den}</div><div class="bar"><div style="width:${s.v}%;background:${s.c};"></div></div></div>`).join('');
 }
+function semanas(){
+  // semanas de agosto/2026 (seg-sáb, domingos fora): 1-8, 10-15, 17-22, 24-29, 31
+  const SEM=[
+    {t:'1ª (01–08)',ini:'2026-08-01',fim:'2026-08-08'},
+    {t:'2ª (10–15)',ini:'2026-08-10',fim:'2026-08-15'},
+    {t:'3ª (17–22)',ini:'2026-08-17',fim:'2026-08-22'},
+    {t:'4ª (24–29)',ini:'2026-08-24',fim:'2026-08-29'},
+    {t:'5ª (31)',ini:'2026-08-31',fim:'2026-08-31'},
+  ];
+  const lojasEsc=escopo().map(l=>l.loja);
+  // conta agendados (todas as possibilidades do mês: passadas+futuras) por loja e semana
+  const cont={};lojasEsc.forEach(l=>cont[l]=SEM.map(()=>0));
+  DATA.clientes.forEach(c=>{
+    if(!lojasEsc.includes(c.loja))return;
+    const dt=parseDia(c.dia);
+    if(dt.getDay()===0)return; // exclui domingos
+    for(let i=0;i<SEM.length;i++){
+      if(c.dia>=SEM[i].ini&&c.dia<=SEM[i].fim){cont[c.loja][i]++;break;}
+    }
+  });
+  const t=document.getElementById('semanaTable');
+  const head='<tr><th>Loja</th>'+SEM.map(s=>`<th class="c">${s.t}</th>`).join('')+'<th class="r active">Total</th></tr>';
+  const body=lojasEsc.map(l=>{
+    const cells=cont[l].map(v=>`<td class="c ${v?'':'dim'}">${v||'–'}</td>`).join('');
+    const tot=cont[l].reduce((a,b)=>a+b,0);
+    return `<tr><td>${l}</td>${cells}<td class="r" style="font-weight:600;">${tot}</td></tr>`;
+  }).join('');
+  const totSem=SEM.map((_,i)=>lojasEsc.reduce((a,l)=>a+cont[l][i],0));
+  const tg=totSem.reduce((a,b)=>a+b,0);
+  const foot='<tr class="foot-row"><td>Total semana</td>'+totSem.map(v=>`<td class="c">${v}</td>`).join('')+`<td class="r" style="color:var(--yellow);">${tg}</td></tr>`;
+  t.innerHTML=head+body+foot;
+}
 function comparativo(){
+  const META_AVAL=30, META_CONV=4;
   const rows=escopo().map(x=>({loja:x.loja,praca:x.praca,poss:x.poss_pass,aval:x.aval,vend:x.vend,
     tAval:x.poss_pass?Math.round(x.aval/x.poss_pass*100):0,
     tVend:x.aval?Math.round(x.vend/x.aval*100):0,
@@ -373,13 +413,16 @@ function comparativo(){
   rows.sort((a,b)=>{const av=a[sortKey],bv=b[sortKey];const cmp=(typeof av==='string')?av.localeCompare(bv):av-bv;return sortDir==='asc'?cmp:-cmp;});
   const T={poss:0,aval:0,vend:0};rows.forEach(r=>{T.poss+=r.poss;T.aval+=r.aval;T.vend+=r.vend;});
   T.tAval=T.poss?Math.round(T.aval/T.poss*100):0;T.tVend=T.aval?Math.round(T.vend/T.aval*100):0;T.conv=T.poss?Math.round(T.vend/T.poss*100):0;
-  const cc=(v,ref)=>v>ref?'v-up':(v===ref?'v-eq':'v-down');
+  const cc=(v,ref)=>v>ref?'v-up':(v===ref?'v-eq':'v-down');       // compara ao total (Vendas/Aval.)
+  const cm=(v,meta)=>v>=meta?'v-up':'v-down';                      // bate meta = verde, não bate = vermelho
   const cols=[{k:'loja',t:'Loja'},{k:'praca',t:'Praça'},{k:'poss',t:'Possib.',n:1},{k:'aval',t:'Aval.',n:1},{k:'tAval',t:'Aval./Possib.',n:1},{k:'vend',t:'Vendas',n:1},{k:'tVend',t:'Vendas/Aval.',n:1},{k:'conv',t:'% Conv. geral',n:1}];
   const arrow=k=>sortKey===k?(sortDir==='asc'?' ↑':' ↓'):'';
   const head='<tr>'+cols.map(c=>`<th class="sortable ${c.n?'r':''} ${sortKey===c.k?'active':''}" data-k="${c.k}">${c.t}${arrow(c.k)}</th>`).join('')+'</tr>';
-  const body=rows.map(r=>`<tr><td>${r.loja}</td><td class="dim">${r.praca}</td><td class="r">${r.poss}</td><td class="r dim">${r.aval}</td><td class="r ${cc(r.tAval,T.tAval)}">${r.tAval}%</td><td class="r">${r.vend}</td><td class="r ${cc(r.tVend,T.tVend)}">${r.tVend}%</td><td class="r ${cc(r.conv,T.conv)}">${r.conv}%</td></tr>`).join('');
-  const tot=`<tr class="total-row"><td>TOTAL</td><td></td><td class="r">${T.poss}</td><td class="r">${T.aval}</td><td class="r">${T.tAval}%</td><td class="r">${T.vend}</td><td class="r">${T.tVend}%</td><td class="r">${T.conv}%</td></tr>`;
-  document.getElementById('compTable').innerHTML=head+body+tot;
+  // linha de metas logo abaixo do cabeçalho
+  const metaRow=`<tr class="meta-row"><td colspan="2">🎯 Meta</td><td class="r dim">—</td><td class="r dim">—</td><td class="r">≥ ${META_AVAL}%</td><td class="r dim">—</td><td class="r dim">—</td><td class="r">≥ ${META_CONV}%</td></tr>`;
+  const body=rows.map(r=>`<tr><td>${r.loja}</td><td class="dim">${r.praca}</td><td class="r">${r.poss}</td><td class="r dim">${r.aval}</td><td class="r ${cm(r.tAval,META_AVAL)}">${r.tAval}%</td><td class="r">${r.vend}</td><td class="r ${cc(r.tVend,T.tVend)}">${r.tVend}%</td><td class="r ${cm(r.conv,META_CONV)}">${r.conv}%</td></tr>`).join('');
+  const tot=`<tr class="total-row"><td>TOTAL</td><td></td><td class="r">${T.poss}</td><td class="r">${T.aval}</td><td class="r ${cm(T.tAval,META_AVAL)}">${T.tAval}%</td><td class="r">${T.vend}</td><td class="r">${T.tVend}%</td><td class="r ${cm(T.conv,META_CONV)}">${T.conv}%</td></tr>`;
+  document.getElementById('compTable').innerHTML=head+metaRow+body+tot;
   document.querySelectorAll('#compTable th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(sortKey===k)sortDir=sortDir==='asc'?'desc':'asc';else{sortKey=k;sortDir=(k==='loja'||k==='praca')?'asc':'desc';}comparativo();});
 }
 function prox6(){
@@ -402,7 +445,7 @@ function detalhe(){
   const body=rows.map(r=>`<tr><td class="dim" style="white-space:nowrap;">${fmtDiaLong(r.dia)}</td><td class="c" style="white-space:nowrap;font-variant-numeric:tabular-nums;">${r.hora||'–'}</td><td>${r.nome}</td>${showLoja?`<td class="dim">${r.loja}</td>`:''}<td class="dim">${r.modelo}</td><td style="white-space:nowrap;font-variant-numeric:tabular-nums;">${r.placa}</td><td><span class="pill rev">${r.rev}</span></td><td class="dim" style="white-space:nowrap;">${r.tel}</td></tr>`).join('');
   t.innerHTML=head+body;
 }
-function refresh(){kpis();taxas();comparativo();prox6();detalhe();}
+function refresh(){kpis();taxas();comparativo();semanas();prox6();detalhe();}
 
 diaSel.onchange=detalhe;
 document.getElementById('btnReload').onclick=carregar;
