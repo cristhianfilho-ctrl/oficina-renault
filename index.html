@@ -58,6 +58,16 @@ body{background:#111112;color:#e8e9ea;font-family:"Barlow","Helvetica Neue",Aria
 }
 #view-oficina .btn-voltar:hover{border-color:#ffce00;color:#ffce00}
 
+/* barra "planilha guardada" na aba Ajustes do estoque */
+#view-estoque .salvo-bar{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding-top:12px;
+  border-top:1px solid #34393e;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.03em;
+}
+#view-estoque .salvo-ok{color:#8b9095}
+#view-estoque .salvo-alerta{color:#fbbf24}
+#view-estoque .salvo-vazio{color:#6d7378}
+#view-estoque .salvo-bar .sf-btn{margin-left:auto}
+
 /* selo de origem dos dados nos cards */
 #view-home .painel .tag-fonte{
   position:absolute;top:14px;right:16px;font-family:var(--mono);font-size:8.5px;letter-spacing:1.4px;
@@ -513,6 +523,7 @@ body{background:#111112;color:#e8e9ea;font-family:"Barlow","Helvetica Neue",Aria
           <strong>Anexar planilha de estoque</strong>
           <span>Arraste o arquivo aqui ou clique para escolher · .xls, .xlsx ou .csv</span>
         </div>
+        <div class="salvo-bar" id="ajusteSalvo"></div>
         <div style="margin-top:14px;font-family:var(--mono);font-size:11px;color:var(--apagado);line-height:1.6">
           Lê as colunas <span style="color:var(--amarelo)">Empresa</span>, <span style="color:var(--amarelo)">Família</span>, <span style="color:var(--amarelo)">Modelo</span>, <span style="color:var(--amarelo)">Chassi</span>, <span style="color:var(--amarelo)">Cor</span>, <span style="color:var(--amarelo)">Dias Estoque</span>, <span style="color:var(--amarelo)">Pago</span>, <span style="color:var(--amarelo)">Valor Compra</span>, <span style="color:var(--amarelo)">Flag Proposta</span> e <span style="color:var(--amarelo)">Flag Pedido</span> pelo nome do cabeçalho, então não importa se a posição mudar.
         </div>
@@ -703,6 +714,8 @@ function handleFile(evt) {
       const pagos = allEstoque.filter(r=>r.pago==='Sim').length;
       const st = document.getElementById('ajusteStatus');
       if(st) st.innerHTML = `<span style="color:var(--amarelo)">${file.name}</span> · ${allEstoque.length} linhas · <span style="color:var(--ok)">${pracas.length} praças</span> · ${pagos} pagos · ${agora}`;
+      estoqueMeta = { arquivo:file.name, em:new Date().toISOString(), restaurado:false };
+      salvarEstoque();
 
     } catch(e) {
       setStatus('err', 'Erro ao ler: ' + e.message);
@@ -1510,6 +1523,105 @@ renderAll();
 // ── PONTE COM A CENTRAL (tela inicial) ───────────────────────────────────────
 window.getEstoqueRows = function(){ return allEstoque; };
 
+// ── PERSISTÊNCIA DA PLANILHA NO NAVEGADOR ────────────────────────────────────
+const CHAVE_ESTOQUE = 'eurovia_estoque_dados';
+let estoqueMeta = { arquivo:'', em:'', restaurado:false };
+
+function fmtCarimbo(iso){
+  if(!iso) return '—';
+  const d = new Date(iso);
+  if(isNaN(d)) return '—';
+  return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+function diasDesde(iso){
+  if(!iso) return null;
+  const d = new Date(iso); if(isNaN(d)) return null;
+  const a = new Date(d); a.setHours(0,0,0,0);
+  const b = new Date();  b.setHours(0,0,0,0);
+  return Math.round((b - a) / 86400000);
+}
+function textoIdade(iso){
+  const dias = diasDesde(iso);
+  if(dias === null) return '';
+  if(dias <= 0) return 'hoje';
+  if(dias === 1) return 'ontem';
+  return 'há ' + dias + ' dias';
+}
+
+function salvarEstoque(){
+  try{
+    localStorage.setItem(CHAVE_ESTOQUE, JSON.stringify({
+      v:1, arquivo:estoqueMeta.arquivo, em:estoqueMeta.em, linhas:allEstoque
+    }));
+    pintarSalvo();
+  }catch(e){
+    console.warn('[Estoque] não consegui guardar a planilha', e);
+    const el = document.getElementById('ajusteSalvo');
+    if(el) el.innerHTML = '<span class="salvo-alerta">Não consegui guardar a planilha neste navegador ('
+      + ((e && e.name) || 'erro') + '). Os dados valem só para esta sessão.</span>';
+  }
+}
+
+function restaurarEstoque(){
+  let o = null;
+  try{ const raw = localStorage.getItem(CHAVE_ESTOQUE); o = raw ? JSON.parse(raw) : null; }
+  catch(e){ o = null; }
+  if(!o || !Array.isArray(o.linhas) || !o.linhas.length){ pintarSalvo(); return false; }
+  allEstoque = o.linhas;
+  estoqueMeta = { arquivo:o.arquivo || 'planilha', em:o.em || '', restaurado:true };
+  setStatus('ok', allEstoque.length + ' veículos · planilha de ' + fmtCarimbo(estoqueMeta.em)
+                  + ' (' + textoIdade(estoqueMeta.em) + ')');
+  const badge = document.getElementById('dataBadge');
+  if(badge && estoqueMeta.em){
+    const d = new Date(estoqueMeta.em);
+    badge.textContent = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'})
+                      + ', ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  }
+  const st = document.getElementById('ajusteStatus');
+  if(st) st.innerHTML = '<span style="color:var(--amarelo)">' + estoqueMeta.arquivo + '</span> · '
+    + allEstoque.length + ' linhas · guardada em ' + fmtCarimbo(estoqueMeta.em);
+  pintarSalvo();
+  return true;
+}
+
+function limparEstoqueSalvo(){
+  if(!confirm('Apagar a planilha guardada neste navegador? Você precisará anexar o arquivo novamente.')) return;
+  try{
+    localStorage.removeItem(CHAVE_ESTOQUE);
+    localStorage.removeItem('eurovia_resumo_estoque');
+  }catch(e){}
+  allEstoque = [];
+  estoqueMeta = { arquivo:'', em:'', restaurado:false };
+  setStatus('', 'Sem dados');
+  const badge = document.getElementById('dataBadge'); if(badge) badge.textContent = '—';
+  const st = document.getElementById('ajusteStatus'); if(st) st.textContent = 'Nenhuma planilha carregada';
+  const pg = document.getElementById('placarGlobal'); if(pg) pg.innerHTML = '';
+  pintarSalvo();
+  renderAll();
+}
+
+function pintarSalvo(){
+  const el = document.getElementById('ajusteSalvo');
+  if(!el) return;
+  if(!allEstoque.length){
+    el.innerHTML = '<span class="salvo-vazio">Nada guardado ainda. A planilha anexada fica salva neste '
+      + 'navegador e volta sozinha na próxima vez que você abrir o arquivo.</span>';
+    return;
+  }
+  const dias = diasDesde(estoqueMeta.em);
+  const velha = dias !== null && dias >= 2;
+  el.innerHTML = '<span class="' + (velha ? 'salvo-alerta' : 'salvo-ok') + '">Planilha guardada · '
+    + allEstoque.length + ' veículos · ' + fmtCarimbo(estoqueMeta.em) + ' (' + textoIdade(estoqueMeta.em) + ')'
+    + (velha ? ' — vale conferir se já existe uma versão mais nova' : '') + '</span>'
+    + '<button class="sf-btn" onclick="limparEstoqueSalvo()">Apagar planilha guardada</button>';
+}
+
+window.limparEstoqueSalvo = limparEstoqueSalvo;
+window.getEstoqueMeta = function(){ return estoqueMeta; };
+
+// recupera a última planilha anexada
+if (restaurarEstoque()) renderAll();
+
 </script>
 
 <script>
@@ -1989,6 +2101,17 @@ function renderHome(){
     barraEstoque = {esq:'Veículos pagos', dir:'aguardando planilha', pct:0};
   }
 
+  /* selo do card de estoque */
+  let seloEstoque;
+  if (!temDados) seloEstoque = 'sem planilha';
+  else if (E.origem === 'planilha'){
+    const m = window.getEstoqueMeta ? window.getEstoqueMeta() : null;
+    seloEstoque = (m && m.restaurado && m.em)
+      ? 'planilha de ' + new Date(m.em).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})
+      : 'dados carregados';
+  }
+  else seloEstoque = 'último resumo salvo';
+
   /* card da oficina */
   let descOficina, metricasOficina, barraOficina, seloOficina;
   if (temOfi){
@@ -2024,7 +2147,7 @@ function renderHome(){
       desc:descEstoque,
       metricas:metricasEstoque,
       barra:barraEstoque,
-      selo: temDados ? (E.origem==='planilha' ? 'dados carregados' : 'último resumo salvo') : 'sem planilha'
+      selo: seloEstoque
     },
     {
       id:'oficina', nome:'Painel de', destaque:'Oficina', link:'#oficina', interno:'oficina',
