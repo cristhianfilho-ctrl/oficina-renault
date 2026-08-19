@@ -58,6 +58,55 @@ body{background:#111112;color:#e8e9ea;font-family:"Barlow","Helvetica Neue",Aria
 }
 #view-oficina .btn-voltar:hover{border-color:#ffce00;color:#ffce00}
 
+/* botões de ação do comparativo da oficina */
+#view-oficina .ofi-acoes{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#view-oficina .ofi-btn{
+  font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;text-transform:uppercase;
+  letter-spacing:.12em;font-size:11.5px;padding:8px 14px;cursor:pointer;border-radius:0;
+  background:#1f2225;color:#c8cdd2;border:1px solid #34393e;transition:.15s;
+}
+#view-oficina .ofi-btn:hover{border-color:#ffce00;color:#ffce00}
+#view-oficina .ofi-btn.ativo{border-color:#8b9095;color:#e8e9ea}
+#view-oficina .ofi-btn.amarelo{background:#ffce00;color:#16181a;border-color:#ffce00}
+#view-oficina .ofi-btn.amarelo:hover{background:#ffd83d;color:#16181a}
+
+/* overlay do slide da oficina */
+#view-oficina .ofi-slide-overlay{
+  display:none;position:fixed;inset:0;z-index:60;background:rgba(10,11,12,.94);
+  padding:18px;overflow:auto;
+}
+#view-oficina .ofi-slide-overlay.on{display:block}
+#view-oficina .ofi-slide-box{
+  max-width:1360px;margin:0 auto;background:#16181a;border:1px solid #34393e;
+}
+#view-oficina .ofi-slide-topo{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:14px 18px;border-bottom:1px solid #34393e;
+}
+#view-oficina .ofi-slide-tit{
+  font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:600;text-transform:uppercase;
+  letter-spacing:.16em;font-size:12px;color:#8b9095;
+}
+#view-oficina .ofi-slide-ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#view-oficina .ofi-slide-lab{
+  font-family:"Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase;
+  letter-spacing:.14em;font-size:10.5px;color:#6d7378;
+}
+#view-oficina .ofi-slide-ctrl select{
+  font-family:"Barlow",sans-serif;font-size:13px;padding:7px 10px;border-radius:0;
+  background:#1f2225;color:#e8e9ea;border:1px solid #34393e;
+}
+#view-oficina .ofi-slide-tela{padding:18px;overflow-x:auto}
+#view-oficina .ofi-slide-tela canvas{
+  width:100%;max-width:1300px;display:block;margin:0 auto;border:1px solid #34393e;
+}
+#view-oficina .ofi-slide-nota{
+  padding:12px 18px 16px;border-top:1px solid #34393e;
+  font-family:"Barlow",sans-serif;font-size:12px;line-height:1.6;color:#8b9095;
+}
+#view-oficina .ofi-slide-nota b{color:#e8e9ea}
+#view-oficina .ofi-slide-recado{color:#4ade80;margin-left:8px;font-weight:600}
+
 /* barra "planilha guardada" na aba Ajustes do estoque */
 #view-estoque .salvo-bar{
   display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding-top:12px;
@@ -452,14 +501,12 @@ body{background:#111112;color:#e8e9ea;font-family:"Barlow","Helvetica Neue",Aria
 
   <div class="secao anima" style="animation-delay:.15s">
     <h2>Painéis</h2>
-    <span id="atualizacao"></span>
   </div>
 
   <main class="paineis" id="paineis"></main>
 
   <footer class="rodape anima" style="animation-delay:.4s">
     <span>Eurovia Renault · 8 lojas · Pernambuco / Paraíba / Bahia</span>
-    <span id="rodapeData"></span>
   </footer>
   </div>
 </div>
@@ -610,10 +657,39 @@ body{background:#111112;color:#e8e9ea;font-family:"Barlow","Helvetica Neue",Aria
 
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
     <div class="sec-title" style="margin:0;">Comparativo entre lojas <span class="dim" style="font-weight:400;font-size:11px;text-transform:none;letter-spacing:.02em;color:var(--apagado);">· possibilidades passadas</span></div>
-    <span class="dim" style="font-size:11px;">clique no cabeçalho para ordenar</span>
+    <div class="ofi-acoes">
+      <span class="dim" style="font-size:11px;">clique no cabeçalho para ordenar</span>
+      <button class="ofi-btn" id="btnOrdemPadrao" onclick="ordenacaoPadraoOficina()">Ordenação padrão</button>
+      <button class="ofi-btn amarelo" onclick="abrirSlideOficina()">Slide</button>
+    </div>
   </div>
   <div class="sec-note">Verde = bate a meta · vermelho = abaixo da meta.</div>
   <div class="tablewrap"><div class="tablescroll"><table id="compTable"></table></div></div>
+
+  <div class="ofi-slide-overlay" id="ofiSlideOverlay">
+    <div class="ofi-slide-box">
+      <div class="ofi-slide-topo">
+        <div class="ofi-slide-tit">Slide · Comparativo entre lojas</div>
+        <div class="ofi-slide-ctrl">
+          <span class="ofi-slide-lab">Tamanho</span>
+          <select id="ofiSlideTam" onchange="desenharSlideOficina()">
+            <option value="1200">Pequeno &nbsp;·&nbsp; 1200×675</option>
+            <option value="1600">Médio &nbsp;·&nbsp; 1600×900</option>
+            <option value="1920">Grande &nbsp;·&nbsp; 1920×1080</option>
+          </select>
+          <button class="ofi-btn amarelo" onclick="copiarSlideOficina()">Copiar imagem</button>
+          <button class="ofi-btn" onclick="baixarSlideOficina()">Baixar PNG</button>
+          <button class="ofi-btn" onclick="fecharSlideOficina()">Fechar</button>
+        </div>
+      </div>
+      <div class="ofi-slide-tela"><canvas id="ofiSlideCanvas" width="1200" height="675"></canvas></div>
+      <div class="ofi-slide-nota">
+        Clique em <b>Copiar imagem</b> e cole direto no WhatsApp ou no e-mail. Se o navegador bloquear a cópia,
+        ele baixa o PNG automaticamente. O slide sai na mesma ordem da tabela.
+        <span class="ofi-slide-recado" id="ofiSlideRecado"></span>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="tabpane" id="pane-agenda">
@@ -1840,7 +1916,7 @@ const sim=v=>String(v||'').trim().toLowerCase()==='sim';
 /* ====== ESTADO ====== */
 let DATA={por_loja:[],clientes:[]};   // clientes tem campos reais
 let selLojas=new Set();
-let sortKey='conv',sortDir='desc';
+let sortKey='padrao',sortDir='asc';
 
 /* ====== LEITURA DA PLANILHA ====== */
 async function fetchCSV(url){
@@ -2063,7 +2139,7 @@ function comparativo(){
     tAval:x.poss_pass?Math.round(x.aval/x.poss_pass*100):0,
     tVend:x.aval?Math.round(x.vend/x.aval*100):0,
     conv:x.poss_pass?Math.round(x.vend/x.poss_pass*100):0}));
-  rows.sort((a,b)=>{const av=a[sortKey],bv=b[sortKey];const cmp=(typeof av==='string')?av.localeCompare(bv):av-bv;return sortDir==='asc'?cmp:-cmp;});
+  rows.sort(ordenadorOficina());
   const T={poss:0,aval:0,vend:0};rows.forEach(r=>{T.poss+=r.poss;T.aval+=r.aval;T.vend+=r.vend;});
   T.tAval=T.poss?Math.round(T.aval/T.poss*100):0;T.tVend=T.aval?Math.round(T.vend/T.aval*100):0;T.conv=T.poss?Math.round(T.vend/T.poss*100):0;
   const cc=(v,ref)=>v>ref?'v-up':(v===ref?'v-eq':'v-down');       // compara ao total (Vendas/Aval.)
@@ -2075,6 +2151,10 @@ function comparativo(){
   const metaRow=`<tr class="meta-row"><td colspan="2">META</td><td class="r dim">—</td><td class="r dim">—</td><td class="r">≥ ${META_AVAL}%</td><td class="r dim">—</td><td class="r dim">—</td><td class="r">≥ ${META_CONV}%</td></tr>`;
   const body=rows.map(r=>`<tr><td>${r.loja}</td><td class="dim">${r.praca}</td><td class="r">${r.poss}</td><td class="r dim">${r.aval}</td><td class="r ${cm(r.tAval,META_AVAL)}">${r.tAval}%</td><td class="r">${r.vend}</td><td class="r ${cc(r.tVend,T.tVend)}">${r.tVend}%</td><td class="r ${cm(r.conv,META_CONV)}">${r.conv}%</td></tr>`).join('');
   const tot=`<tr class="total-row"><td>TOTAL</td><td></td><td class="r">${T.poss}</td><td class="r">${T.aval}</td><td class="r ${cm(T.tAval,META_AVAL)}">${T.tAval}%</td><td class="r">${T.vend}</td><td class="r">${T.tVend}%</td><td class="r ${cm(T.conv,META_CONV)}">${T.conv}%</td></tr>`;
+  window.ultimoComparativo = {rows:rows, T:T, META_AVAL:META_AVAL, META_CONV:META_CONV};
+  const _bp = document.getElementById('btnOrdemPadrao');
+  if(_bp) _bp.classList.toggle('ativo', sortKey === 'padrao');
+  if(document.getElementById('ofiSlideOverlay') && document.getElementById('ofiSlideOverlay').classList.contains('on')) desenharSlideOficina();
   document.getElementById('compTable').innerHTML=head+metaRow+body+tot;
   document.querySelectorAll('#compTable th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(sortKey===k)sortDir=sortDir==='asc'?'desc':'asc';else{sortKey=k;sortDir=(k==='loja'||k==='praca')?'asc':'desc';}comparativo();});
 }
@@ -2114,6 +2194,227 @@ carregar();
 
 // ── PONTE COM A CENTRAL (tela inicial) ───────────────────────────────────────
 window.getOficinaData = function(){ return DATA; };
+
+// ── ORDENAÇÃO PADRÃO + SLIDE DO COMPARATIVO ──────────────────────────────────
+const ORDEM_PADRAO_LOJAS = ['Imbiribeira','Piedade','Afogados','Olinda','Cabedelo','Epitacio','Iguatemi','Lauro'];
+const TITULO_SLIDE_OFICINA = 'Oficina - Agosto/2026';
+const NOME_SLIDE_LOJA = {Epitacio:'EPITÁCIO', Lauro:'LAURO', Iguatemi:'IGUATEMI'};
+
+function posPadraoLoja(nome){
+  const i = ORDEM_PADRAO_LOJAS.findIndex(l => l.toLowerCase() === String(nome||'').toLowerCase());
+  return i === -1 ? 99 : i;
+}
+
+// usado por comparativo(): 'padrao' segue a ordem fixa das lojas
+function ordenadorOficina(){
+  if(sortKey === 'padrao') return (a,b) => posPadraoLoja(a.loja) - posPadraoLoja(b.loja);
+  return (a,b) => {
+    const av = a[sortKey], bv = b[sortKey];
+    const cmp = (typeof av === 'string') ? av.localeCompare(bv) : av - bv;
+    return sortDir === 'asc' ? cmp : -cmp;
+  };
+}
+
+function ordenacaoPadraoOficina(){
+  sortKey = 'padrao'; sortDir = 'asc';
+  comparativo();
+}
+
+// ── SLIDE (canvas) ───────────────────────────────────────────────────────────
+function tabelaOficina(ctx, area, cols, linhas, rodape){
+  const {px, esq, larg, topo} = area;
+  const pad = px(9);
+  let F = px(15);
+  const fDisp = '"Barlow Condensed",Barlow,sans-serif';
+  const fMono = '"IBM Plex Mono",monospace';
+  const medir = (txt,peso,tam,fam) => { ctx.font = `${peso} ${tam}px ${fam||fDisp}`; return ctx.measureText(txt).width; };
+
+  const natural = cols.map((c,ci) => {
+    let w = medir(c.rot, 700, F*0.9);
+    const fam = c.mono ? fMono : fDisp;
+    linhas.concat(rodape ? [rodape] : []).forEach(l => {
+      const val = l[ci] || '';
+      const txt = typeof val === 'object' ? val.t : String(val);
+      if(txt) w = Math.max(w, medir(txt, 700, F, fam));
+    });
+    return w + pad*2;
+  });
+  let total = natural.reduce((a,b) => a+b, 0);
+  const fator = larg/total;
+  if(fator < 1) F = F*fator;            // só diminui a fonte quando não cabe
+  const colW = natural.map(w => w*fator); // largura sempre preenche a moldura
+  total = colW.reduce((a,b) => a+b, 0);
+  const x0 = esq + (larg-total)/2;
+  const hLin = F*1.75, hCab = F*1.95;
+  const xCol = ci => x0 + colW.slice(0,ci).reduce((a,b) => a+b, 0);
+
+  let y = topo;
+
+  // cabeçalho amarelo
+  ctx.fillStyle = CORES_SLIDE.cabFundo;
+  ctx.fillRect(x0, y, total, hCab);
+  cols.forEach((c,ci) => {
+    ctx.fillStyle = CORES_SLIDE.cabTexto;
+    ctx.font = `700 ${F*0.9}px ${fDisp}`;
+    ctx.textAlign = c.esq ? 'left' : 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(c.rot, c.esq ? xCol(ci)+pad : xCol(ci)+colW[ci]/2, y+hCab/2);
+  });
+  y += hCab;
+
+  // linhas
+  linhas.forEach((lin,ri) => {
+    ctx.fillStyle = ri%2 === 0 ? CORES_SLIDE.linhaA : CORES_SLIDE.linhaB;
+    ctx.fillRect(x0, y, total, hLin);
+    ctx.strokeStyle = CORES_SLIDE.grade; ctx.lineWidth = px(0.5);
+    cols.forEach((c,ci) => {
+      if(ci > 0){ ctx.beginPath(); ctx.moveTo(xCol(ci), y); ctx.lineTo(xCol(ci), y+hLin); ctx.stroke(); }
+    });
+    cols.forEach((c,ci) => {
+      const val = lin[ci] || '';
+      const txt = typeof val === 'object' ? val.t : String(val);
+      if(!txt) return;
+      ctx.fillStyle = typeof val === 'object' && val.cor ? val.cor : CORES_SLIDE.texto;
+      const forte = (typeof val === 'object' && val.forte) || ci === 0;
+      ctx.font = `${forte?700:500} ${F}px ${c.mono?fMono:fDisp}`;
+      ctx.textAlign = c.esq ? 'left' : 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(txt, c.esq ? xCol(ci)+pad : xCol(ci)+colW[ci]/2, y+hLin/2);
+    });
+    y += hLin;
+  });
+
+  // rodapé (grupo)
+  if(rodape){
+    const hR = hLin*1.15;
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x0, y, total, hR);
+    ctx.strokeStyle = CORES_SLIDE.amarelo; ctx.lineWidth = px(1.6);
+    ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0+total, y); ctx.stroke();
+    cols.forEach((c,ci) => {
+      const val = rodape[ci] || '';
+      const txt = typeof val === 'object' ? val.t : String(val);
+      if(!txt) return;
+      ctx.fillStyle = typeof val === 'object' && val.cor ? val.cor : CORES_SLIDE.amarelo;
+      ctx.font = `700 ${F}px ${c.mono?fMono:fDisp}`;
+      ctx.textAlign = c.esq ? 'left' : 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(txt, c.esq ? xCol(ci)+pad : xCol(ci)+colW[ci]/2, y+hR/2);
+    });
+    y += hR;
+  }
+  return y;
+}
+
+function desenharSlideOficina(){
+  const d = window.ultimoComparativo;
+  const cv = document.getElementById('ofiSlideCanvas');
+  if(!d || !cv) return;
+
+  const sel = document.getElementById('ofiSlideTam');
+  const W = sel ? parseInt(sel.value) : 1200;
+  const H = Math.round(W*675/1200);
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+
+  const area = molduraEstoque(ctx, W, H, TITULO_SLIDE_OFICINA,
+    `Meta: ${d.META_AVAL}% de avaliação · ${d.META_CONV}% de conversão`);
+
+  const ok = CORES_SLIDE.ok, ruim = CORES_SLIDE.alerta, apagado = '#9aa0a6';
+  const corMeta = (v,meta) => v >= meta ? ok : ruim;
+  const corRef  = (v,ref)  => v > ref ? ok : (v === ref ? CORES_SLIDE.amarelo : ruim);
+
+  const cols = [
+    {rot:'Loja', esq:true},
+    {rot:'Praça'},
+    {rot:'Possib.', mono:true},
+    {rot:'Aval.', mono:true},
+    {rot:'Aval./Possib.', mono:true},
+    {rot:'Vendas', mono:true},
+    {rot:'Vendas/Aval.', mono:true},
+    {rot:'% Conv. geral', mono:true}
+  ];
+
+  const linhas = d.rows.map(r => [
+    {t:NOME_SLIDE_LOJA[r.loja] || r.loja.toUpperCase(), forte:true},
+    {t:r.praca, cor:apagado},
+    String(r.poss),
+    {t:String(r.aval), cor:apagado},
+    {t:r.tAval+'%', cor:corMeta(r.tAval, d.META_AVAL), forte:true},
+    String(r.vend),
+    {t:r.tVend+'%', cor:corRef(r.tVend, d.T.tVend)},
+    {t:r.conv+'%', cor:corMeta(r.conv, d.META_CONV), forte:true}
+  ]);
+
+  const rodape = [
+    {t:'GRUPO EUROVIA'},
+    '',
+    String(d.T.poss),
+    String(d.T.aval),
+    {t:d.T.tAval+'%', cor:corMeta(d.T.tAval, d.META_AVAL)},
+    String(d.T.vend),
+    {t:d.T.tVend+'%', cor:CORES_SLIDE.amarelo},
+    {t:d.T.conv+'%', cor:corMeta(d.T.conv, d.META_CONV)}
+  ];
+
+  tabelaOficina(ctx, area, cols, linhas, rodape);
+}
+
+async function abrirSlideOficina(){
+  const d = window.ultimoComparativo;
+  if(!d || !d.rows.length){
+    setStatusOfi('err', 'Sem dados para gerar o slide — carregue a planilha primeiro.');
+    return;
+  }
+  document.getElementById('ofiSlideOverlay').classList.add('on');
+  notaSlideOficina('');
+  await carregarLogo();
+  desenharSlideOficina();
+}
+
+function fecharSlideOficina(){
+  document.getElementById('ofiSlideOverlay').classList.remove('on');
+}
+
+function notaSlideOficina(msg){
+  const el = document.getElementById('ofiSlideRecado');
+  if(el) el.textContent = msg || '';
+}
+
+async function copiarSlideOficina(){
+  const cv = document.getElementById('ofiSlideCanvas');
+  try{
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+    notaSlideOficina('Imagem copiada!');
+    setTimeout(() => notaSlideOficina(''), 2500);
+  }catch(e){
+    baixarSlideOficina();
+    notaSlideOficina('Cópia bloqueada pelo navegador — baixei o PNG.');
+  }
+}
+
+function baixarSlideOficina(){
+  const cv = document.getElementById('ofiSlideCanvas');
+  const a = document.createElement('a');
+  a.download = 'eurovia-oficina-comparativo.png';
+  a.href = cv.toDataURL('image/png');
+  a.click();
+}
+
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape'){
+    const ov = document.getElementById('ofiSlideOverlay');
+    if(ov && ov.classList.contains('on')) fecharSlideOficina();
+  }
+});
+
+window.ordenacaoPadraoOficina = ordenacaoPadraoOficina;
+window.abrirSlideOficina  = abrirSlideOficina;
+window.fecharSlideOficina = fecharSlideOficina;
+window.desenharSlideOficina = desenharSlideOficina;
+window.copiarSlideOficina = copiarSlideOficina;
+window.baixarSlideOficina = baixarSlideOficina;
 
 </script>
 
@@ -2231,9 +2532,6 @@ function renderHome(){
   const pctAval  = pct(O.aval, O.pass);
   const temDados = E.origem !== 'config';
   const temOfi   = O.origem !== 'config';
-
-  document.getElementById('atualizacao').textContent = 'Atualizado em ' + CONFIG.atualizadoEm;
-  document.getElementById('rodapeData').textContent  = 'Atualizado em ' + CONFIG.atualizadoEm;
 
   const KPIS = [
     {rot:'Meta do mês',      val:n(V.meta)},
