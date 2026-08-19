@@ -119,6 +119,9 @@ body{background:#111112;color:#e8e9ea;font-family:"Barlow","Helvetica Neue",Aria
 #view-oficina .ofi-slide-nota b{color:#e8e9ea}
 #view-oficina .ofi-slide-recado{color:#4ade80;margin-left:8px;font-weight:600}
 
+/* cadeado na aba Ajustes do estoque */
+#view-estoque nav .trava{font-size:10px;opacity:.75;letter-spacing:0;margin-left:2px}
+
 /* barra "planilha guardada" na aba Ajustes do estoque */
 #view-estoque .salvo-bar{
   display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding-top:12px;
@@ -699,7 +702,7 @@ body{background:#111112;color:#e8e9ea;font-family:"Barlow","Helvetica Neue",Aria
     <button id="tab1" onclick="switchTab(1)">Pagos</button>
     <button id="tab2" onclick="switchTab(2)">Alertas</button>
     <button id="tab3" onclick="switchTab(3)">Slide Reunião</button>
-    <button id="tab4" onclick="switchTab(4)">Ajustes</button>
+    <button id="tab4" onclick="switchTab(4)">Ajustes <span class="trava" id="trava-estoque">🔒</span></button>
   </nav>
 
   <!-- FILTRO GLOBAL -->
@@ -1239,6 +1242,7 @@ function handleFile(evt) {
 
 // ── TABS ─────────────────────────────────────────────────────────────────────
 function switchTab(i) {
+  if(i === 4 && !liberarEstoque('para abrir os Ajustes')) return;
   [0,1,2,3,4].forEach(j => {
     const tb = document.getElementById('tab'+j); if(tb) tb.classList.toggle('active', j===i);
     const pp = document.getElementById('p'+j);   if(pp) pp.classList.toggle('active', j===i);
@@ -2030,6 +2034,31 @@ renderAll();
 // ── PONTE COM A CENTRAL (tela inicial) ───────────────────────────────────────
 window.getEstoqueRows = function(){ return allEstoque; };
 
+// ── TRAVA DA ABA AJUSTES ─────────────────────────────────────────────────────
+// Mesma senha do painel de vendas. Vale enquanto a janela está aberta;
+// ao fechar o arquivo, tranca de novo.
+const SENHA_ESTOQUE = 'via1rnlt';
+let destravadoEstoque = false;
+
+function marcarTravaEstoque(){
+  const t = document.getElementById('trava-estoque');
+  if(t) t.textContent = destravadoEstoque ? '' : '🔒';
+}
+function liberarEstoque(motivo){
+  if(destravadoEstoque) return true;
+  const s = prompt('Senha ' + motivo + ':');
+  if(s === null) return false;
+  if(s.trim() === SENHA_ESTOQUE){
+    destravadoEstoque = true;
+    marcarTravaEstoque();
+    return true;
+  }
+  alert('Senha incorreta.');
+  return false;
+}
+window.estoqueDestravado = () => destravadoEstoque;
+marcarTravaEstoque();
+
 // ── PERSISTÊNCIA DA PLANILHA NO NAVEGADOR ────────────────────────────────────
 const CHAVE_ESTOQUE = 'eurovia_estoque_dados';
 let estoqueMeta = { arquivo:'', em:'', restaurado:false, fonte:'' };
@@ -2092,6 +2121,7 @@ function restaurarEstoque(){
 }
 
 function limparEstoqueSalvo(){
+  if(!liberarEstoque('para apagar a planilha guardada')) return;
   if(!confirm('Apagar a planilha guardada neste navegador? Você precisará anexar o arquivo novamente.')) return;
   try{
     localStorage.removeItem(CHAVE_ESTOQUE);
@@ -4835,7 +4865,10 @@ window.getVendasResumo = function(){
     const falta = meta - vendas;
     return { meta, vendas, faturados, falta, diasUteis:dias,
              metaDiaria: falta/dias, lojas: NOMES.length,
-             em: atualizadoEm, origem:'painel' };
+             em: atualizadoEm,
+             backupEm: (fonteAtual && fonteAtual.data) ? fonteAtual.data : null,
+             backupNome: (fonteAtual && fonteAtual.nome) ? fonteAtual.nome : null,
+             origem:'painel' };
   }catch(e){ return null; }
 };
 window.irParaAbaVendas = function(aba){
@@ -4917,6 +4950,18 @@ function resumoEstoque(){
 }
 
 /* ---- resumo de vendas: números vivos do painel de vendas > CONFIG ---- */
+/* selo de hora: "atualizado às 15:00" quando é do mesmo dia */
+function seloHora(iso){
+  if(!iso) return null;
+  const d = new Date(iso);
+  if(isNaN(d)) return null;
+  const hora = d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const hoje = new Date();
+  return d.toDateString() === hoje.toDateString()
+    ? 'atualizado às ' + hora
+    : 'atualizado ' + d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}) + ' às ' + hora;
+}
+
 function resumoVendas(){
   const r = window.getVendasResumo ? window.getVendasResumo() : null;
   if(r && r.meta) return r;
@@ -5008,7 +5053,7 @@ function renderHome(){
     descVendas = `Faltam ${n(V.falta)} vendas para a meta`
       + (V.diasUteis ? ` · ${n1(V.metaDiaria)} por dia nos ${n(V.diasUteis)} dias úteis` : '')
       + `. Lançamento diário, cadência, semanal e indicadores por loja.`;
-    seloVendas = V.em ? 'lançado em ' + V.em : 'dados do painel';
+    seloVendas = seloHora(V.backupEm) || seloHora(V.em) || 'dados do painel';
   } else {
     descVendas = 'Lançamento diário, cadência de faturamento, semanal e indicadores por loja.';
     seloVendas = 'sem lançamentos';
@@ -5017,14 +5062,11 @@ function renderHome(){
   /* selo do card de estoque */
   let seloEstoque;
   if (!temDados) seloEstoque = 'sem planilha';
-  else if (E.origem === 'planilha'){
+  else {
     const m = window.getEstoqueMeta ? window.getEstoqueMeta() : null;
-    if (m && m.em){
-      const dia = new Date(m.em).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-      seloEstoque = (m.fonte === 'drive' ? 'Drive · ' : 'planilha de ') + dia;
-    } else seloEstoque = 'dados carregados';
+    seloEstoque = (m && seloHora(m.em))
+      || (E.origem === 'cache' ? 'último resumo salvo' : 'dados carregados');
   }
-  else seloEstoque = 'último resumo salvo';
 
   /* card da oficina */
   let descOficina, metricasOficina, barraOficina, seloOficina;
@@ -5120,7 +5162,8 @@ function irParaEstoque(){
   mostrarTela('view-estoque');
   /* sem planilha carregada? abre direto na aba Ajustes para anexar */
   const linhas = (window.getEstoqueRows ? window.getEstoqueRows() : []) || [];
-  if (!linhas.length && window.switchTab) window.switchTab(4);
+  const livre = window.estoqueDestravado ? window.estoqueDestravado() : false;
+  if (!linhas.length && livre && window.switchTab) window.switchTab(4);
   if (location.hash !== '#estoque') location.hash = '#estoque';
 }
 function irParaOficina(){
